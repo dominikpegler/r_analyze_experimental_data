@@ -1,0 +1,68 @@
+---
+title: "homework 1"
+author: "Dominik Pegler"
+date: '2022-04-02'
+output: html_document
+---
+
+Due: April 20 2022
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import der Daten
+
+Importiert die Daten eures Datensatzes in R und fügt diese zu einem einzigen großen data frame bzw. einer data table zusammen.
+
+```{r}
+print("some code here")
+```
+
+## Umformen der Variablen
+
+Schaut euch die Struktur des Datensatzes an und wandelt alle Variablen außer age und reactionTime in Faktoren um. Benennt die Faktorstufen von answerCorrect in aussagekräftige Namen um (1 = richtige Antwort, 0 = falsche Antwort, 99 = zu späte Antwort/timeout [nach einiger Zeit war keine Antwort mehr möglich und der Durchgang wurde als 99 gewertet])
+
+```{r}
+print("some code here")
+```
+
+## Bereinigung der Daten
+
+Ermittelt dann die Anzahl an falschen, richtigen und zu späten Antworten jeder Versuchsperson und entfernt die Versuchsperson mit den meisten falschen Antworten komplett aus dem Datensatz.
+
+```{r}
+print("some code here")
+```
+
+## Bonusaufgabe: Berechnung Fehlerrate pro Versuchsperson
+
+Ermittelt die generelle Fehlerrate jeder Versuchsperson (Anzahl an falschen und zu späten Antworten im Verhältnis zu allen gegebenen Antworten).
+
+```{r}
+print("some code here")
+```
+
+## Bereinigung der Daten II
+
+Schließt alle zu späten Reaktionszeiten aus, sowie alle Reaktionszeiten unter 150 ms und über 1 Sekunde (Die Variable reactionTime enthält die Reaktionszeit in Sekunden). Ermittelt dann, wie viel Prozent der Reaktionszeiten durch diese Maßnahme ausgeschlossen wurden.
+
+```{r}
+print("some code here")
+```
+
+## Split Datensatz und Vergleich
+
+Teilt den Datensatz mit den ausgeschlossenen Versuchspersonen und den ausgeschlossenen Reaktionszeiten nun nochmal in zwei Datensätze auf. Einen mit nur korrekten Antworten und einen mit nur falschen Antworten. Ermittelt dann das arithmetische Mittel (mean) der Reaktionszeiten in allen experimentellen Bedingungen (also für valid und invalid in jeweils jeder der zwei Faktorstufen der Hinweisreizbedingungen), getrennt für falsche und richtige Antworten.
+
+```{r}
+print("some code here")
+```
+
+## Bonusaufgabe: Validitätseffekt
+
+Ermittelt den Validitätseffekt (durchschnittliche Reaktionszeit der invaliden Bedingung minus durchschnittliche Reaktionszeit der validen Bedingung) für die korrekten Antworten in allen Hinweisreizbedingungen pro Person. Ermittelt dann das arithmetische Mittel des Validitätseffekts in allen Hinweisreiz-Bedingungen.
+
+```{r}
+print("some code here")
+```
