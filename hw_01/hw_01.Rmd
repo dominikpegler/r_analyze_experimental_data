@@ -16,8 +16,29 @@ knitr::opts_chunk$set(echo = TRUE)
 Importiert die Daten eures Datensatzes in R und fügt diese zu einem einzigen großen data frame bzw. einer data table zusammen.
 
 ```{r}
-print("some code here")
+
+library(ggplot2)
+
+file_path = "dataPeglerVpn1.txt"
+
+df <- read.csv(file_path,sep="\t")
+df
 ```
+
+
+```{r}
+ggplot(df,aes(reactionTime)) + geom_histogram(binwidth=0.01)
+```
+
+```{r}
+ggplot(df,aes(reactionTime, fill=cueSize)) + geom_density(alpha=0.2)
+```
+
+
+```{r}
+ggplot(df,aes(cueSize,reactionTime)) + geom_point(alpha=0.6)
+```
+
 
 ## Umformen der Variablen
 
