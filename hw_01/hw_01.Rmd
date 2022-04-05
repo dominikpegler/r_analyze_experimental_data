@@ -19,16 +19,17 @@ Importiert die Daten eures Datensatzes in R und fügt diese zu einem einzigen gr
 
 library(ggplot2)
 
-file_path = "dataPeglerVpn1.txt"
+filelist = list.files(pattern = ".*.txt")
+datalist = lapply(filelist, function(x)read.table(x, header=T)) 
+df <- do.call("rbind", datalist)
 
-df <- read.csv(file_path,sep="\t")
 head(df)
 ```
 
 ### histogram: reactionTime
 
 ```{r}
-ggplot(df,aes(reactionTime)) + geom_histogram(binwidth=0.01)
+ggplot(df,aes(reactionTime)) + geom_histogram(binwidth=0.1)
 ```
 
 ### density plot: reactionTime
@@ -45,12 +46,17 @@ ggplot(df,aes(reactionTime, fill=cueSize)) + geom_density(alpha=0.2)
 ggplot(df,aes(reactionTime, fill=targetValidity)) + geom_density(alpha=0.2)
 ```
 
+```{r}
+ggplot(df,aes(reactionTime, fill=gender)) + geom_density(alpha=0.2)
+```
+
+
 ### scatterplot
 
 #### reactionTime vs cueSize
 
 ```{r}
-ggplot(df,aes(cueSize,reactionTime)) + geom_point(alpha=0.13)
+ggplot(df,aes(age,reactionTime)) + geom_point(alpha=0.13)
 ```
 
 ### scatterplot
@@ -59,7 +65,7 @@ ggplot(df,aes(cueSize,reactionTime)) + geom_point(alpha=0.13)
 
 
 ```{r}
-ggplot(df,aes(targetValidity,reactionTime)) + geom_point(alpha=0.13)
+ggplot(df,aes(sbj,reactionTime)) + geom_point(alpha=0.13)
 ```
 
 
