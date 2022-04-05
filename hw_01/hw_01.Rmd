@@ -22,7 +22,7 @@ library(ggplot2)
 file_path = "dataPeglerVpn1.txt"
 
 df <- read.csv(file_path,sep="\t")
-df
+head(df)
 ```
 
 
