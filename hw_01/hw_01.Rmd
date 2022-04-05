@@ -25,18 +25,41 @@ df <- read.csv(file_path,sep="\t")
 head(df)
 ```
 
+### histogram: reactionTime
 
 ```{r}
 ggplot(df,aes(reactionTime)) + geom_histogram(binwidth=0.01)
 ```
 
+### density plot: reactionTime
+
+#### condition: cueSize
+
 ```{r}
 ggplot(df,aes(reactionTime, fill=cueSize)) + geom_density(alpha=0.2)
 ```
 
+#### condition: targetValidity
+
+```{r}
+ggplot(df,aes(reactionTime, fill=targetValidity)) + geom_density(alpha=0.2)
+```
+
+### scatterplot
+
+#### reactionTime vs cueSize
 
 ```{r}
 ggplot(df,aes(cueSize,reactionTime)) + geom_point(alpha=0.13)
+```
+
+### scatterplot
+
+#### reactionTime vs targetValidity
+
+
+```{r}
+ggplot(df,aes(targetValidity,reactionTime)) + geom_point(alpha=0.13)
 ```
 
 
