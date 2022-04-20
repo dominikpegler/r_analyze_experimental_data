@@ -11,108 +11,224 @@ Due: April 20 2022
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Import der Daten
-
-Importiert die Daten eures Datensatzes in R und fügt diese zu einem einzigen großen data frame bzw. einer data table zusammen.
+## Import data and join individual text files
 
 ```{r}
-
 library(ggplot2)
 
 filelist = list.files(pattern = ".*.txt")
 datalist = lapply(filelist, function(x)read.table(x, header=T)) 
 df <- do.call("rbind", datalist)
-
-head(df)
 ```
 
-### histogram: reactionTime
+## data exploration
+
+### structure
+
+```{r}
+str(df)
+```
+
+```{r}
+summary(df)
+```
+
+### distribution of values
+
+```{r}
+table(unlist(df$cueSize))
+```
+
+```{r}
+table(unlist(df$targetValidity))
+```
+
+```{r}
+table(unlist(df$sbj))
+```
+
+```{r}
+table(unlist(df$gender))
+```
+
+```{r}
+table(unlist(df$age))
+```
+
+```{r}
+ggplot(df,aes(age)) + geom_histogram(binwidth=1)
+```
+
+```{r}
+table(unlist(df$answerCorrect))
+```
+
+```{r}
+summary(df$reactionTime)
+```
 
 ```{r}
 ggplot(df,aes(reactionTime)) + geom_histogram(binwidth=0.1)
 ```
 
-### density plot: reactionTime
-
-#### condition: cueSize
-
-```{r}
-ggplot(df,aes(reactionTime, fill=cueSize)) + geom_density(alpha=0.2)
-```
-
-#### condition: targetValidity
-
-```{r}
-ggplot(df,aes(reactionTime, fill=targetValidity)) + geom_density(alpha=0.2)
-```
+### density plot: reactionTime (condition = gender)
 
 ```{r}
 ggplot(df,aes(reactionTime, fill=gender)) + geom_density(alpha=0.2)
 ```
 
-
-### scatterplot
-
-#### reactionTime vs cueSize
+### scatterplot: reactionTime vs cueSize
 
 ```{r}
 ggplot(df,aes(age,reactionTime)) + geom_point(alpha=0.13)
 ```
 
-### scatterplot
+## Transform variables
 
-#### reactionTime vs targetValidity
-
-
-```{r}
-ggplot(df,aes(sbj,reactionTime)) + geom_point(alpha=0.13)
-```
-
-
-## Umformen der Variablen
-
-Schaut euch die Struktur des Datensatzes an und wandelt alle Variablen außer age und reactionTime in Faktoren um. Benennt die Faktorstufen von answerCorrect in aussagekräftige Namen um (1 = richtige Antwort, 0 = falsche Antwort, 99 = zu späte Antwort/timeout [nach einiger Zeit war keine Antwort mehr möglich und der Durchgang wurde als 99 gewertet])
+Data structure
 
 ```{r}
-print("some code here")
+str(df)
 ```
-
-## Bereinigung der Daten
-
-Ermittelt dann die Anzahl an falschen, richtigen und zu späten Antworten jeder Versuchsperson und entfernt die Versuchsperson mit den meisten falschen Antworten komplett aus dem Datensatz.
 
 ```{r}
-print("some code here")
+df$sbj <- factor(df$sbj)
 ```
-
-## Bonusaufgabe: Berechnung Fehlerrate pro Versuchsperson
-
-Ermittelt die generelle Fehlerrate jeder Versuchsperson (Anzahl an falschen und zu späten Antworten im Verhältnis zu allen gegebenen Antworten).
 
 ```{r}
-print("some code here")
+df$answerCorrect <- factor(df$answerCorrect,levels=c(0,1,99),labels=c("incorrect","correct","timeout"))
 ```
 
-## Bereinigung der Daten II
-
-Schließt alle zu späten Reaktionszeiten aus, sowie alle Reaktionszeiten unter 150 ms und über 1 Sekunde (Die Variable reactionTime enthält die Reaktionszeit in Sekunden). Ermittelt dann, wie viel Prozent der Reaktionszeiten durch diese Maßnahme ausgeschlossen wurden.
+New data structure
 
 ```{r}
-print("some code here")
+str(df)
 ```
 
-## Split Datensatz und Vergleich
+## Data cleaning
 
-Teilt den Datensatz mit den ausgeschlossenen Versuchspersonen und den ausgeschlossenen Reaktionszeiten nun nochmal in zwei Datensätze auf. Einen mit nur korrekten Antworten und einen mit nur falschen Antworten. Ermittelt dann das arithmetische Mittel (mean) der Reaktionszeiten in allen experimentellen Bedingungen (also für valid und invalid in jeweils jeder der zwei Faktorstufen der Hinweisreizbedingungen), getrennt für falsche und richtige Antworten.
+eliminate participant with most incorrect answers
 
 ```{r}
-print("some code here")
+df_incorrect <- df[df$answerCorrect == "incorrect",]
 ```
 
-## Bonusaufgabe: Validitätseffekt
-
-Ermittelt den Validitätseffekt (durchschnittliche Reaktionszeit der invaliden Bedingung minus durchschnittliche Reaktionszeit der validen Bedingung) für die korrekten Antworten in allen Hinweisreizbedingungen pro Person. Ermittelt dann das arithmetische Mittel des Validitätseffekts in allen Hinweisreiz-Bedingungen.
+subjects ordered by count of incorrect numbers
 
 ```{r}
-print("some code here")
+# count observations
+sort(summary(df_incorrect$sbj),decreasing=TRUE)
 ```
+
+```{r}
+df_cleaned <- df[df$sbj != "12",]
+```
+
+```{r}
+nrow(df)
+```
+
+```{r}
+nrow(df_cleaned)
+```
+
+## Bonus: Calculate error rate per subject
+
+new column for rate of not correct answers (incorrect + time-out)
+
+including all participants
+
+```{r}
+summary(df$sbj)
+```
+
+All subjects have responded 320 times
+
+```{r}
+not_correct <- df[df$answerCorrect != "correct",]
+
+sort(summary(not_correct$sbj) / 320, decreasing = TRUE)
+```
+
+Subjects 4, 12 (previously excluded) and 9 have the 3 highest error rates with approx. 10%
+
+## Data cleaning II
+
+eliminate participants with
+* too long reaction time (time-out)  
+* reaction time < 0.150s  
+* reaction time > 1.000s
+
+```{r}
+df_cleaned_2 <- df_cleaned[df_cleaned$answerCorrect!="timeout" & df_cleaned$reactionTime<=1 & df_cleaned$reactionTime >= 0.15,]
+
+nrow(df_cleaned_2)
+```
+
+**Percentage** of observations excluded by this measure
+
+```{r}
+(nrow(df_cleaned) - nrow(df_cleaned_2)) / nrow(df_cleaned) * 100
+```
+
+**Percentage** of change in mean reaction time as a consequnce of this measure
+
+```{r}
+(mean(df_cleaned$reactionTime) - mean(df_cleaned_2$reactionTime)) / mean(df_cleaned$reactionTime) * 100
+```
+
+Mean in reaction time decreased by 0.82% as a consequence
+
+## Split data set and compare means
+
+Split into incorrect and correct answers
+
+```{r}
+df_cleaned_2_correct <- df_cleaned_2[df_cleaned_2$answerCorrect=="correct",]
+nrow(df_cleaned_2_correct)
+```
+
+```{r}
+df_cleaned_2_incorrect <- df_cleaned_2[df_cleaned_2$answerCorrect=="incorrect",]
+nrow(df_cleaned_2_incorrect)
+```
+
+### Means
+
+```{r}
+aggregate(df_cleaned_2_correct$reactionTime, list(df_cleaned_2_correct$cueSize, df_cleaned_2_correct$targetValidity), FUN=mean) 
+```
+
+```{r}
+aggregate(df_cleaned_2_incorrect$reactionTime, list(df_cleaned_2_incorrect$cueSize, df_cleaned_2_incorrect$targetValidity), FUN=mean) 
+```
+
+## Bonus: Validity effect
+
+1) per subject for all conditions 
+2) total for all conditions
+
+```{r}
+valid <- df_cleaned_2_correct[df_cleaned_2_correct$targetValidity=="valid",]
+valid <- aggregate(valid$reactionTime, list(valid$sbj), FUN=mean) 
+valid
+```
+
+```{r}
+invalid <- df_cleaned_2_correct[df_cleaned_2_correct$targetValidity=="invalid",]
+invalid <- aggregate(invalid$reactionTime, list(invalid$sbj), FUN=mean) 
+invalid
+```
+
+Mean difference per subject
+
+```{r}
+invalid$x - valid$x
+```
+
+Overall mean difference
+
+```{r}
+mean(invalid$x - valid$x)
+```
+
