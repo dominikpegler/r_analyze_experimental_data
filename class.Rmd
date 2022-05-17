@@ -1,0 +1,102 @@
+---
+title: "class 2022-05-03"
+author: "Dominik Pegler"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(ggplot2)
+
+filelist = list.files(pattern = "dataHexagon.txt")
+datalist = lapply(filelist, function(x)read.table(x, header=T)) 
+df <- do.call("rbind", datalist)
+head(df)
+```
+
+```{r}
+df <- read.table("dataHexagon.txt", header = T)
+head(df)
+```
+
+```{r}
+library(data.table)
+
+df <- fread("dataHexagon.txt", header = T)
+head(df)
+```
+```{r}
+factors <- c("answerCorrect", "sbj")
+setDT(df)[, (factors) := lapply(.SD, as.factor), .SDcols = factors]
+
+levels(df$answerCorrect)[levels(df$answerCorrect) == "0"] <- "wrong"
+levels(df$answerCorrect)[levels(df$answerCorrect) == "1"] <- "correct"
+levels(df$answerCorrect)[levels(df$answerCorrect) == "99"] <- "timeout"
+```
+
+
+```{r}
+str(df)
+```
+
+```{r}
+summary(df)
+```
+```{r}
+unique(df$sbj)
+```
+
+## add new variable "targetColor"
+
+```{r}
+df$targetColor <- "tbd"
+```
+
+```{r}
+df[1,c("responseKeyRed", "targetColor")]
+```
+```{r}
+for (i in nrow(df)) {
+  print(i)
+}
+```
+
+
+```{r}
+for(i in 1:nrow(df)) {
+  
+if (df[i, "responseKeyRed"] == "f" & df[i, "corrRespF"] == "f") {
+  df[i, "targetColor"] <- "red"
+} else if (df[i, "responseKeyRed"] == "j" & df[i, "corrRespJ"] == "j") {
+  df[i, "targetColor"] <- "red"
+} else {
+  df[i, "targetColor"] <- "blue"
+  
+}}
+
+df
+```
+## sort columns by subject and order of trials
+```{r}
+df_ordered <- df[order(df$sbj,df$order),]
+```
+
+## assign value to new variable targetColorChanged
+
+```{r}
+df_ordered$targetColorChanged <- TRUE
+
+for(i in 1:nrow(df_ordered)) {
+  
+  if (i > 1 && (df_ordered[i, "targetColor"] == df_ordered[i-1, "targetColor"] && df_ordered[i, "sbj"] == df_ordered[i-1, "sbj"])) {
+    df_ordered[i, "targetColorChanged"] <- FALSE
+  }
+  
+}
+
+head(df_ordered)
+```
+
+
+
