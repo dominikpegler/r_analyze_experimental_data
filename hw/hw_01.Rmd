@@ -217,7 +217,7 @@ df_cleaned_2_correct
 df_cleaned_2_correct[, c(cueCondition, targetValidity, sbj)]
 ```
 
-
+```{r}
 data_validity <- dcast(df_cleaned_2_correct_means_sbj, sbj + cueCondition ~ targetValidity, value.var = "meanRT")
 
 head(data_validity) # zeigt die erste sechs Zeilen
