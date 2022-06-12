@@ -270,13 +270,13 @@ Around 25 ms for the condition with small cue size.
 Nsim <- 1000 # Number of simulations
 effect <- 0.02 # 20 ms validity effect (smallest relevant effect size)
 #sampleSize <- length(unique(dt_template$sbj)) # sample size of data
-simSampleSize <- 22 # sample size for simulation (can be changed!)
+simSampleSize <- 23 # sample size for simulation (can be changed!)
 trialChangeFactor <- 1 # change factor for trial number to increase or decrease trial number
 
 runSimulation(dt_template, Nsim, effect, sampleSize, simSampleSize, trialChangeFactor)
 ```
 
-22 People for the condition with small cue size.
+23 People for the condition with small cue size.
 
 ## 5. Find the average minimum number of valid trials per cue ...
 ... condition needed to find an effect of 20 ms with a test power of 90%. To do this, you can adjust the trialChangeFactor variable to change the number of trials per participant. The variable is a multiplier, so a trialChangeFactor of 1.5 means one and a half times as many trials per participant as in your experiment, 0.5 means half as many trials, etc. The ratio of valid and invalid trials remains the same. You can calculate the average number of valid runs per person by determining this in your data set and multiplying it by the trialChangeFactor or by determining it from the simulated data.
@@ -300,8 +300,6 @@ runSimulation(dt_template, Nsim, effect, sampleSize, simSampleSize, trialChangeF
 ```{r}
 cat(avg_valid_runs_per_sbj * trialChangeFactor, "valid trials per person in the small cue size condition are necessary in order to reach 90% power to detect an effect of",1000*effect,"ms")
 ```
-
-440.4 valid trials per person in the small cue size condition are necessary in order to reach 90% power to detect an effect of 20 ms
 
 Simulation for the big cue size condition was not carried out since it would take extremely long given the still almost inexistent power for 6 times higher valid responses per subject. 
 

@@ -1,0 +1,45 @@
+---
+title: "homework 4"
+author: "Dominik Pegler"
+date: '2022-06-12'
+output: html_document
+---
+
+Due: June 12 2022
+
+## Prepare data
+
+```{r}
+library(data.table)
+library(ggplot2)
+
+filelist = list.files(pattern = ".*.txt")
+datalist = lapply(filelist, function(x)read.table(x, header=T)) 
+df <- do.call("rbind", datalist)
+setDT(df) # Convert data.frame to data.table
+
+df$sbj <- factor(df$sbj)
+df$answerCorrect <- factor(df$answerCorrect,levels=c(0,1,99),labels=c("incorrect","correct","timeout"))
+
+# eliminate subject 12
+df <- df[df$sbj != "12",]
+df <- df[df$answerCorrect=="correct" & df$reactionTime<=1 & df$reactionTime >= 0.15,]
+```
+
+This home assignment is (partly) based on the previous ones. That is, only correct reaction times between 150 ms and 1 second are analyzed and the person with the most errors is excluded (data set "data_trimmed_correct").
+
+In the final home assignment, we analyze the data to answer the research questions. These questions are, "Does the cue elicit a significant validity effect (significantly higher or lower than 0)? If so, in which direction is the validity effect (positive or negative validity effect)? Are the validity effects significantly different between the two cue conditions? One can analyze the validity effect directly. For example, this was done in task 3 of the 2nd home assignment. For this assignment, however, we analyze the trimmed correct reaction times. 
+
+The following tasks are to be solved:
+
+1. Analyze the trimmed correct reaction times of your data set with mixed linear models (fixed factors: target validity and cue condition; random factor: random per-participant intercept). In doing so, start with the interaction model and gradually remove parameters. Finds and describes the most parsimonious model that best fits the data.
+2. Repeats the analysis of Task 1, but this time starts with the null model and adds parameters incrementally. Finds and describes the most parsimonious and best-fitting model to the data.
+3. Perform post-hoc tests of the fitting model (the same model should be found in Task 1 and 2) using the package emmeans() to describe the effect found.
+4. Interpret the found result in words. For example, "The model with only the main effect of target validity describes the data best and most parsimoniously. This main effect is based on significantly faster response times in the valid condition compared to the invalid condition."
+5. Generates diagnostic plots of the model found and briefly describes whether the model assumptions are met.
+
+```{r}
+
+```
+
+
