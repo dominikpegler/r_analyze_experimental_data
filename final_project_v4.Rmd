@@ -1,0 +1,941 @@
+---
+title: "Final assignment"
+subtitle: |
+  | Experiment 2: Positive instruction
+  | Course: Analyzing experimental-psychological data with R (Grüner & Forstinger)
+author:
+  - Elisa Grünauer
+  - Lars Keuter
+  - Dominik Pegler
+date: "`r format(Sys.time(), '%d %B %Y')`"
+tags: [experimental psychology, university vienna]
+output: 
+  bookdown::html_document2:
+    code_folding: hide
+    df_print: kable
+editor_options: 
+  chunk_output_type: console
+---
+
+## Content {-}
+
+- Research question
+- ...
+
+## Research question {-}
+
+Which validity effects are elicited by the cues in the condition of positive instruction?
+
+```{r setup, include=FALSE}
+
+# import libraries
+
+options(knitr.graphics.auto_pdf = TRUE)
+
+library(data.table)
+library(ggplot2)
+library(lme4) 
+library(outliers)
+library(ggrepel)
+library(emmeans)
+library(ggResidpanel)
+library(broom)
+library(MBESS)
+library(nlme)
+library(kableExtra)
+
+# create function for APA conform p values
+papafy <- function(data, p_column, decimal) {
+  data <- as.data.table(data, keep.rownames="model")
+  # round bigger p values
+  data_temp <- data[, ..p_column]
+  names(data_temp) <- "p.value"
+  p_string <- rep("", times = length(data_temp$p.value))
+  for (i in 1:length(data_temp$p.value)) {
+    if (is.na(data_temp$p.value[i])) {
+      next
+    }
+    if (data_temp$p.value[i] < 0.1) {
+      p_string[i] <- trimws(format(round(data_temp$p.value[i], 3), nsmall = 3))
+      p_string[i] <- substring(p_string[i], 2)
+      if (p_string[i] == ".000") {p_string[i] <- "< .001"}
+      if (p_string[i] == "A") {p_string[i] <- NA}
+    } else if (data_temp$p.value[i] >= 0.1) {
+      p_string[i] <- trimws(format(round(data_temp$p.value[i], decimal), nsmall = decimal))
+      if (p_string[i] != "1.00") {p_string[i] <- substring(p_string[i], 2)}
+      if (p_string[i] == "NA") {p_string[i] <- NA}
+    }
+  }
+  data[[p_column]] <- p_string
+  return(data)
+}
+
+round_df <- function(df, digits) {
+  nums <- vapply(df, is.numeric, FUN.VALUE = logical(1))
+
+  df[,nums] <- round(df[,nums], digits = digits)
+
+  (df)
+}
+
+
+# function for power simulation
+
+sim_exp <- function(Nsim, effect, sampleSize, simSampleSize = sampleSize, trialChangeFactor) {
+
+simList <- vector(mode = "list", length = Nsim)
+j <- NULL
+i <-  NULL
+for (j in 1:Nsim) {
+  start.time <- Sys.time()
+  simData <- copy(dt_template)
+  if (simSampleSize < sampleSize) {
+    randomSbj <- sample(1:length(unique(simData$sbj)), simSampleSize)
+    simData <- simData[simData$sbj %in% randomSbj,]
+    levels(simData$sbj)[levels(simData$sbj) %in% randomSbj] <- c(1:simSampleSize)
+    } else if (simSampleSize > sampleSize) {
+      sampleSizeIncrease <- simSampleSize - sampleSize
+      if (sampleSizeIncrease <= sampleSize) {
+        randomSbj <- sample(1:length(unique(simData$sbj)), sampleSizeIncrease)
+        simDataAddition <- simData[simData$sbj %in% randomSbj,]
+        simDataAddition$sbj <- factor(simDataAddition$sbj, levels = (unique(simDataAddition$sbj)))
+        levels(simDataAddition$sbj) <- c((sampleSize+1):(sampleSize+sampleSizeIncrease))
+        simData <- rbind(simData, simDataAddition)
+      } else if (sampleSizeIncrease > sampleSize) {
+        simRepetition <- floor(simSampleSize / sampleSize)
+        simDataBase <- simData[rep(seq_len(nrow(simData)), times = simRepetition), ]
+        simDataBase$repetition <- rep(1:simRepetition, each = nrow(simData))
+        simDataBase$sbj_new <- as.numeric(simDataBase$sbj)
+        simDataBase$sbj_new <- simDataBase$sbj_new + sampleSize * (simDataBase$repetition-1)
+        simDataBase$sbj <- as.factor(simDataBase$sbj_new)
+        simDataBase$repetition <- NULL
+        simDataBase$sbj_new <- NULL
+        randomSbj <- sample(1:length(unique(simData$sbj)), simSampleSize %% sampleSize)
+        simDataAddition <- simData[simData$sbj %in% randomSbj,]
+        simDataAddition$sbj <- factor(simDataAddition$sbj, levels = (unique(simDataAddition$sbj)))
+        levels(simDataAddition$sbj) <-
+        c((length(unique(simDataBase$sbj))+1):(sampleSize+sampleSizeIncrease))
+        simData <- rbind(simDataBase, simDataAddition)
+      }
+    }
+
+  if (trialChangeFactor < 1) {
+    simData <- simData[sample(1:nrow(simData), round(nrow(simData) * trialChangeFactor))]
+  } else if (trialChangeFactor > 1) {
+    simData <- rbind(simData[rep(seq_len(nrow(simData)), times = floor(trialChangeFactor)), ],
+                     simData[sample(1:nrow(simData), round(nrow(simData) * (trialChangeFactor-floor(trialChangeFactor))))])
+  }
+
+  for (i in 1:simSampleSize) {
+    # simulates random interindividual variance
+    individualRTvariance <-  rnorm(1, mean = 0, sd = 0.05)
+    RT_var_sd <- 0.015
+    RT_var1 <- rnorm(1, mean = 0, sd = RT_var_sd)
+    RT_var2 <- rnorm(1, mean = 0, sd = RT_var_sd)
+    RT_var3 <- rnorm(1, mean = 0, sd = RT_var_sd)
+    RT_var4 <- rnorm(1, mean = 0, sd = RT_var_sd)
+    RT_var5 <- rnorm(1, mean = 0, sd = RT_var_sd)
+    RT_var6 <- rnorm(1, mean = 0, sd = RT_var_sd)
+
+    # simulate reaction times per condition
+    RT_1 <- sample(data_trimmed_correct$RTnormalized_real - effect + individualRTvariance,
+                   nrow(simData[sbj == i & targetValidity == "valid" & cueType == "match"]),
+                   replace = TRUE) + RT_var1
+    RT_2 <- sample(data_trimmed_correct$RTnormalized_real + individualRTvariance,
+                   nrow(simData[sbj == i & targetValidity == "valid" & cueType == "non-match"]),
+                   replace = TRUE) + RT_var2
+    
+    RT_3 <- sample(data_trimmed_correct$RTnormalized_real + individualRTvariance,
+                   nrow(simData[sbj == i & targetValidity == "valid" & cueType == "inhibition"]),
+                   replace = TRUE) + RT_var3
+        
+    RT_4 <- sample(data_trimmed_correct$RTnormalized_real + individualRTvariance,
+                   nrow(simData[sbj == i & targetValidity == "invalid" & cueType == "match"]),
+                   replace = TRUE) + RT_var4
+    RT_5 <- sample(data_trimmed_correct$RTnormalized_real + individualRTvariance,
+                   nrow(simData[sbj == i & targetValidity == "invalid" & cueType == "non-match"]),
+                   replace = TRUE) + RT_var5
+    
+    RT_6 <- sample(data_trimmed_correct$RTnormalized_real + individualRTvariance,
+                   nrow(simData[sbj == i & targetValidity == "invalid" & cueType == "inhibition"]),
+                   replace = TRUE) + RT_var6
+
+    # Zuordnung der simulierten Reaktionszeiten zu den Faktorkombinationen
+    simData[sbj == i & targetValidity == "valid" & cueType == "match", reactionTime := RT_1]
+    simData[sbj == i & targetValidity == "valid" & cueType == "non-match", reactionTime := RT_2]
+    simData[sbj == i & targetValidity == "valid" & cueType == "inhibition", reactionTime := RT_3]
+    simData[sbj == i & targetValidity == "invalid" & cueType == "match", reactionTime := RT_4]
+    simData[sbj == i & targetValidity == "invalid" & cueType == "non-match", reactionTime := RT_5]
+    simData[sbj == i & targetValidity == "invalid" & cueType == "inhibition", reactionTime := RT_6]
+  }
+
+  simData[, simNo := j] # ergänzt neue Variable mit der Nummer der Simulation
+  simList[[j]] <- copy(simData) # speichert das fertige simulierte Datenframe in die Liste mit den Simulationen
+  end.time <- Sys.time() # End-Zeit der Simulation eines Datensatzes
+  time.taken <- end.time - start.time # Dauer der Simulation eines Datensatzes
+  print(paste("Progress: ", j, "/", Nsim, " (Duration: ", time.taken, " sec)", sep = ""))
+}
+
+simData <- rbindlist(simList)
+
+return(simData)
+
+}
+```
+
+
+```{r dataPrep, include=FALSE}
+
+data_dir <- file.path(getwd(), "final_data")
+files <- list.files(data_dir, full.names = TRUE, pattern = "*.txt")
+
+datalist <- lapply(files, function(x)read.table(x, header=T, fileEncoding = "utf8", stringsAsFactors = T, dec=","))
+data <- do.call("rbind", datalist)
+setDT(data) # Convert data.frame to data.table
+
+# get data only for positive instructions
+data <- data[instruction == "positive"]
+
+# code timeout as 99
+data$answerCorrect <- as.factor(ifelse(is.na(data$key_responseTarget.rt_raw), 99,
+                                       ifelse(data$key_responseTarget.corr_raw == 0, 0, 1)))
+
+levels(data$answerCorrect)[levels(data$answerCorrect) == "0"] <- "wrong"
+levels(data$answerCorrect)[levels(data$answerCorrect) == "1"] <- "correct"
+levels(data$answerCorrect)[levels(data$answerCorrect) == "99"] <- "timeout"
+
+data$reactionTime <- data$key_responseTarget.rt_raw
+
+print(table(data$answerCorrect))
+```
+
+
+```{r error table and outlier check, include=FALSE}
+
+errorTable <- data[, .(correct = sum(answerCorrect == "correct"),
+                        wrong = sum(answerCorrect == "wrong"),
+                        timeout = sum(answerCorrect == "timeout"),
+                        errorRate = round((sum((answerCorrect != "correct") / 
+                                           length(answerCorrect)) * 100), 2)),
+                   by = sbj]
+
+
+print(errorTable[order(-errorRate)])
+
+# test both highest and lowest error rate
+grubbs.test(errorTable$errorRate, type = 10, two.sided = FALSE) 
+grubbs.test(errorTable$errorRate, type = 10, two.sided = FALSE, opposite = TRUE)
+
+
+# Since this was only one condition of the experiment, we didn't want to remove any outliers for the time being. Outlier removal could then be considered and discussed in a second step across all conditions of the experiment.
+
+```
+
+
+```{r exclude reaction times, include=FALSE}
+
+# exclude incorrectly answered trials and timeouts
+data_correct <- data[ !(answerCorrect == "incorrect" | answerCorrect == "timeout") ]
+wrongAnswers_percentage <-  (nrow(data) - nrow(data_correct)) / nrow(data) 
+
+# exclude trials with rt below 0.15s or above 1s
+data_trimmed_correct <- data_correct[! (reactionTime < 0.150 | reactionTime > 1)  ] 
+excluded_percentage <- (nrow(data_correct) - nrow(data_trimmed_correct)) / nrow(data_correct) 
+
+
+data_trimmed_correct_means_sbj <- data_trimmed_correct[, .(meanRT = mean(reactionTime)),
+                                                       by = .(cueType, targetValidity, sbj)]
+
+data_validity <-  data_trimmed_correct_means_sbj[,
+                        .(validityEffect = meanRT[targetValidity == "invalid"] - 
+                            meanRT[targetValidity == "valid"]),
+                        by = .(sbj, cueType)]
+
+data_validity[, .(meanVal = mean(validityEffect)), by = .(cueType)]
+
+```
+
+# Experiment 2 {-}
+
+## Method {-}
+
+### Participants {-}
+
+```{r demographics, echo = FALSE}
+
+data_unique <- unique(data, by = "sbj")
+
+sbj <- data_unique[, .(meanAge = round(mean(age), 2),
+                       sdAge = round(sd(age), 2),
+                       medianAge = as.double(median(age)),
+                       minAge = min(age),
+                       maxAge = max(age),
+                       n = length(sbj),
+                       woman = sum(sex == "w"),
+                       man = sum(sex == "m"))]
+
+```
+
+
+`r sbj$n` participants (`r sbj$woman` women, `r sbj$man` men) aged between `r sbj$minAge` and `r sbj$maxAge` years (*M*\ =\ `r sbj$meanAge`, *SD*\ =\ `r sbj$sdAge`, *Mdn*\ =\ `r sbj$medianAge`) took part in the experiment. No participant was excluded. Since this was only one condition of the experiment, we didn't want to remove any outliers for the time being. Outlier removal could then be considered and discussed in a second step across all conditions of the experiment.
+
+## Results {-}
+
+### Reliability and Power {-}
+
+```{r reliability, include=FALSE}
+trialsPerCell <- data_trimmed_correct[, .N, by = .(sbj, cueType, targetValidity)]
+
+trialsPerCell_results <- trialsPerCell[, .(meanN = mean(N),
+                                           sdN = sd(N),
+                                           medianN = median(N),
+                                           minN = min(N),
+                                           maxN = max(N)),
+                                       by = .(cueType, targetValidity)]
+```
+
+```{r power analysis, cache=TRUE, include=FALSE}
+data_trimmed_correct$condition <- paste(data_trimmed_correct$targetValidity,
+                                        data_trimmed_correct$cueType, sep = "_")
+
+# Normalize reaction times------------------------------------------------------
+
+vpn <- NULL
+i <- NULL
+j <- NULL
+data_trimmed_correct$RTnormalized <- 0 
+
+
+for (i in 1:length(unique(data_trimmed_correct$sbj))) {
+  vpn_temp <- unique(data_trimmed_correct$sbj)[i] 
+  for (j in 1:length(unique(data_trimmed_correct$condition))) { 
+    condition_temp <- unique(data_trimmed_correct$condition)[j] 
+    meanRT_temp <- mean(data_trimmed_correct[condition == condition_temp & sbj == vpn_temp]$reactionTime) 
+    
+    data_trimmed_correct[condition == condition_temp & sbj == vpn_temp]$RTnormalized <- 
+      data_trimmed_correct[condition == condition_temp & sbj == vpn_temp]$reactionTime - meanRT_temp 
+  }
+}
+
+head(data_trimmed_correct[, "RTnormalized"]) 
+
+# add mean to reaction times making them more interpretable
+data_trimmed_correct$RTnormalized_real <- data_trimmed_correct$RTnormalized + mean(data_trimmed_correct$reactionTime)
+
+head(data_trimmed_correct[, "RTnormalized_real"])
+
+# setup datatable template------------------------------------------------------
+
+# copy from the real data used for the analysis
+dt_template <- copy(data_trimmed_correct[, c("cueType", "targetValidity", "sbj")])
+
+# remove non-existing levels
+dt_template$sbj <- factor(dt_template$sbj, levels = (unique(dt_template$sbj)))
+
+# change sbj to 1:end
+levels(dt_template$sbj) <- c(1:length(unique(dt_template$sbj)))
+levels(dt_template$sbj)
+
+# Plot distributions------------------------------------------------------------
+
+effect <- 0.02 # minimal relevant effect size to simulate
+condition <- rep(c("real", "normalized", "effect"),
+                 each = length(data_trimmed_correct$RTnormalized_real))
+reactionTimes <- c(data_trimmed_correct$reactionTime,
+                   data_trimmed_correct$RTnormalized_real,
+                   data_trimmed_correct$RTnormalized_real - effect)
+
+rt_distributions <- data.table(conditon = condition, reactionTimes = reactionTimes)
+
+mean_rt <- rt_distributions[, .(meanRT = mean(reactionTimes)), by = .(condition)]
+
+ggplot(rt_distributions, aes(reactionTimes, color = condition)) +
+  geom_density(size = 1.5) +
+  scale_color_viridis_d(end = 0.85) +
+  theme(panel.background = element_blank(),
+        panel.grid = element_line(color = "gray"),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_blank())
+
+```
+
+
+```{r analyze sim data, results='hide', include=FALSE}
+Nsim = 1000
+sample_size = length(unique(dt_template$sbj))
+sigNiveau = 0.05
+
+# Run simulation (uncomment for new simulation) -------------------------------------
+#simData <- sim_exp(Nsim = Nsim, effect = 0.02, sampleSize = sample_size,
+#                   simSampleSize = sample_size, trialChangeFactor = 1)
+
+# Save/Load simulation data ---------------------------------------------------------
+#saveRDS(simData, "final_data/simData.rds")
+simData <- readRDS("final_data/simData.rds")
+
+# validity effect for each simulation
+simData_means_sbj <- simData[, .(meanRT = mean(reactionTime)), by = .(simNo, targetValidity, cueType, sbj)]
+
+simValidityEffect <- simData_means_sbj[, .(validityEffect = meanRT[targetValidity == "invalid"] - 
+                                             meanRT[targetValidity == "valid"]),
+                                       by = .(cueType, sbj, simNo)]
+
+# validity effect mean and sd per simulation
+validityEffect_perSim <- simValidityEffect[, .(meanValidityEffect = mean(validityEffect),
+                                               sdValidityEffect = sd(validityEffect)),
+                                           by = .(simNo, cueType)]
+
+
+# Compare SD effect of validity effect between real and simulated data ---------
+
+data_trimmed_correct_sd <- data_validity[, .(sdValidityEffect = sd(validityEffect)),
+                                 by = .(cueType)]
+
+simData_trimmed_correct_sd <- validityEffect_perSim[, .(meanMean = mean(meanValidityEffect),
+                                                       meanSD = mean(sdValidityEffect)),
+                                                   by = .(cueType)]
+
+data_trimmed_correct_sd
+simData_trimmed_correct_sd
+
+# Get statistical power --------------------------------------------------------
+simValidityEffect_results <- simValidityEffect[,
+                                 .(meanValidityEffect = t.test(validityEffect, mu = 0)$estimate,
+                                   p.value = t.test(validityEffect, mu = 0)$p.value,
+                                   t.stat = t.test(validityEffect, mu = 0)$statistic),
+                                 by = .(simNo, cueType)]
+
+powerResults <- simValidityEffect_results[t.stat > 0 & p.value < sigNiveau,
+                                          .(EffectFound = .N,
+                                            Nsim = max(simValidityEffect_results$simNo),
+                                            testPower = .N / max(simValidityEffect_results$simNo)),
+                                          by = .(cueType)]
+
+print(powerResults)
+powerResults[cueType == "match"]$testPower
+
+```
+
+
+We excluded `r round(wrongAnswers_percentage, 2)`% incorrectly answered trials (including trials where participants did not respond) and from the remaining trials we excluded trials with reaction times below 150\ ms and above 1\ s from all analyses (`r round(excluded_percentage, 2)`%). After these exclusions, the number of valid matching trials ranged from `r trialsPerCell_results[cueType == "match" & targetValidity == "valid"]$minN` to `r trialsPerCell_results[cueType == "match" & targetValidity == "valid"]$maxN` (*M*\ =\ `r round(trialsPerCell_results[cueType == "match" & targetValidity == "valid"]$meanN, 2)`, *SD*\ =\ `r round(trialsPerCell_results[cueType == "match" & targetValidity == "valid"]$sdN, 2)`, *Mdn*\ =\ `r trialsPerCell_results[cueType == "match" & targetValidity == "valid"]$medianN`), and of valid non-matching trials from `r trialsPerCell_results[cueType == "non-match" & targetValidity == "valid"]$minN` to `r trialsPerCell_results[cueType == "non-match" & targetValidity == "valid"]$maxN` (*M*\ =\ `r round(trialsPerCell_results[cueType == "non-match" & targetValidity == "valid"]$meanN, 2)`, *SD*\ =\ `r round(trialsPerCell_results[cueType == "non-match" & targetValidity == "valid"]$sdN, 2)`, *Mdn*\ =\ `r trialsPerCell_results[cueType == "non-match" & targetValidity == "valid"]$medianN`) per participant. A power analysis based on `r Nsim` simulations yielded a power of `r substring(trimws(format(round(powerResults[cueType == "match"]$testPower, 3), nsmall = 3)), 2)` to find a validity effect of 20\ ms in the matching condition with the sample size of `r sample_size` participants.
+
+
+## Plotting {.tabset -}
+
+### Reaction times by participant and condition {-}
+
+```{r reaction time by subject, echo = FALSE}
+
+ggplot(data_trimmed_correct, aes(x = targetValidity,
+                                 y = reactionTime,
+                                 fill = cueType)) +
+  geom_violin() +
+  
+  facet_wrap(~ sbj, ncol=4) + 
+  
+  labs(title = "Reaction times of correct answers",
+       subtitle = "Reaction times by subject and experimental condition",
+       x = "Target Validity",
+       y = "Reaction time [ms]") +
+  
+  theme_light() + 
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.x = element_blank(),
+        legend.position="bottom") + 
+  
+  scale_y_continuous(labels = function(x) x * 1000,
+                     limits = c(min(data_correct$reactionTime) - 0.05, max(data_correct$reactionTime) + 0.05)) + 
+  
+  scale_fill_viridis_d(end=0.9)
+
+```
+
+### Mean reaction times and standard errors {-}
+
+```{r mean reaction times and standard errors, echo = FALSE}
+
+
+# aggregate data
+data_correct_mean_se <- data_trimmed_correct[, .(meanRT = mean(reactionTime),
+                                                 seRT = sd(reactionTime) / sqrt(sample_size)),
+                                            by = .(cueType, targetValidity)]
+
+ggplot(data_correct_mean_se, aes(x = targetValidity,
+                                 y = meanRT,
+                                 color = cueType, 
+                                 group = cueType)) +
+  
+       geom_errorbar(aes(ymin = meanRT - seRT,
+                         ymax = meanRT + seRT),
+                     width = 0.2,
+                     size = 1) +
+  
+       stat_summary(fun = mean,
+                    geom = "line",
+                    size=1) +
+       geom_point(color="black", fill="white", shape=21) + 
+  
+       geom_label_repel(aes(label = round(meanRT * 1000, 0)),
+                        min.segment.length = Inf,
+                        color = "black",
+                        size = 3) +
+       scale_y_continuous(labels = function(x) x * 1000) + 
+       
+       scale_color_viridis_d(end=0.9) +
+       theme_minimal() + 
+       labs(title = "Mean reaction times and standard errors",
+            subtitle = "Reaction times and standard erros by experimental condition (for correct answers)",
+            x = "Target Validity",
+            y = "Reaction Time [ms]",
+            color = "Cue Type") 
+
+
+```
+
+
+```{r bonus plot, echo = FALSE}
+
+mean_rt_by_subj <- data_trimmed_correct[, .(meanRT = mean(reactionTime)),
+                                by = .(sbj, cueType, targetValidity)]
+ggplot() +
+  
+  geom_violin(data_trimmed_correct, mapping = aes(x = targetValidity,
+                                          y = reactionTime,
+                                          color = cueType,
+                                          fill = cueType),
+              alpha=0.2, trim=TRUE) +
+
+    geom_jitter(data = mean_rt_by_subj,
+                aes(x = targetValidity,
+                    y = meanRT,
+                    fill = cueType,
+                    color = cueType),
+                position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.9)) +
+  
+    geom_errorbar(data = data_correct_mean_se, 
+                  aes(x = targetValidity,
+                      y = meanRT,
+                      color = cueType,
+                      ymin = meanRT - seRT,
+                      ymax = meanRT + seRT),
+                      size = 1.0, width=0.2, position=position_dodge(0.9)) +
+  
+    stat_summary(data = data_correct_mean_se,
+                 mapping = aes(x = targetValidity, y = meanRT, color=cueType, group=cueType),
+                 fun = mean,
+                 geom = "line", position=position_dodge(width=0.9), size=1.0) +
+
+    geom_point(data = data_correct_mean_se,
+               aes(x = targetValidity,
+                   y = meanRT,
+                   group=cueType), 
+               position=position_dodge(width=0.9),
+               color="black", fill="white", shape=21) +
+  
+    geom_label_repel(data = data_correct_mean_se,
+                     aes(x = targetValidity,
+                         y = meanRT,
+                         group = cueType,
+                         label = round(meanRT * 1000, 0)),
+                     color = "black", size = 3, seed = 42,
+                     position=position_dodge(width=0.9),
+                     min.segment.length = 0) +
+  
+    scale_y_continuous(labels = function(x) x * 1000,
+                       limits = c(0.1, 1)) + 
+  
+    theme_minimal() + 
+    theme(panel.grid.minor.x = element_blank(),
+          panel.grid.major.x = element_blank(),
+          legend.position="bottom") +
+  
+    labs(title = "Mean reaction times and standard errors",
+       subtitle = "Only correct responses were analyzed",
+       x = "Target validity",
+       y = "Reaction time [ms]") +
+  
+    scale_fill_viridis_d(end=0.9) +
+    scale_color_viridis_d(end=0.9)
+
+
+```
+
+
+### Validity effect {-}
+
+
+```{r validity effect, echo=FALSE}
+
+# calc validity effect by subject
+validity_effect <- data_trimmed_correct[, .(validityEffect = mean(reactionTime[targetValidity == "invalid"]) - mean(reactionTime[targetValidity == "valid"]) ),
+                                        by=.(sbj, cueType)]
+
+validity_effect_mean_se <- validity_effect[, .(mean_effect = mean(validityEffect),
+                                               sd_effect = sd(validityEffect)),
+                                           by = cueType]
+
+ggplot() +
+  
+  geom_violin(data = validity_effect,
+              aes(x = cueType,
+                  y = validityEffect),
+              trim = FALSE, fill="grey", color=NA, alpha = 0.2) +
+  
+  geom_jitter(data = validity_effect,
+              aes(x = cueType,
+                  y = validityEffect),
+              width = 0.05,
+              color = "grey", fill="grey") + 
+  
+  geom_point(data = validity_effect_mean_se,
+             aes(x = cueType,
+                 y = mean_effect),
+             color = "red") +
+  
+  geom_errorbar(data=validity_effect_mean_se,
+                aes(x = cueType,
+                    ymin = mean_effect - qt(0.975, df=sample_size-1)*sd_effect/sqrt(sample_size),
+                    ymax = mean_effect + qt(0.975, df=sample_size-1)*sd_effect/sqrt(sample_size)),
+                    width = 0.1,
+                    size = 0.8,
+                    color = "red") + 
+  
+  geom_label_repel(data = validity_effect_mean_se,
+             aes(x = cueType,
+                 y = mean_effect,
+                 label = round(mean_effect * 1000, 0)),
+                 color = "black",
+                 size = 3,
+                 nudge_x = 0.1,
+                 seed = 42) +
+  
+  geom_hline(aes(yintercept = 0),color="red", linetype="dashed") + 
+  
+  scale_y_continuous(labels = function(x) x * 1000,
+                     limits = c(-0.1, 0.2)) + 
+  
+  theme_minimal() + 
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.x = element_blank()) + 
+  
+  labs(title = "Mean validity effect and 95% confidence interval*",
+       subtitle = "* based on a two-tailed one-sample t test against zero",
+       x = "Cue Type",
+       y = "Validiy Effect [ms]") 
+
+```
+
+### Number of correct trials {-}
+
+```{r count of correct trials, echo=FALSE}
+
+ggplot(data = data_trimmed_correct, aes(x=sbj, fill=cueType)) +
+  
+  geom_bar(position = position_dodge(), width=0.7) + 
+  
+  geom_hline(aes(yintercept = 30),color="black", linetype="dashed") + 
+  
+  facet_wrap(~targetValidity, ncol=1, strip.position="right") +
+  
+  theme_light() + 
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.x = element_blank(),
+        legend.position="bottom") +
+  
+  scale_fill_viridis_d(end=0.9) +
+  
+  labs(title = "Count of correct trials",
+       subtitle = "Count of correct trials for every subject in every experimental condition",
+       x = "Subject",
+       y = "Number of trials",
+       fill = "Cue type") 
+
+
+```
+
+
+```{r rtAnalysis, include=FALSE, cache=TRUE}
+rt.interaction <- lmer(reactionTime ~ cueType * targetValidity + (1 | sbj),
+                       data_trimmed_correct, REML = FALSE)
+
+rt.main <- lmer(reactionTime ~ cueType + targetValidity + (1 | sbj),
+                    data_trimmed_correct, REML = FALSE)
+
+anova(rt.interaction, rt.main) # interaction model significantely better than main model
+
+# post-hoc analysis
+# create interaction model with sbj for correct post-hoc results
+
+# remove non-existing factor level of sjb (important for the gls model later)
+data_trimmed_correct$sbj <- factor(data_trimmed_correct$sbj, levels = unique(data_trimmed_correct$sbj))
+
+# using gls() as it allows modelling variable variance across experimental condition and participants
+# this im important to get correct standard errors
+rt.interaction_sbj <- gls(reactionTime ~ cueType * targetValidity * sbj,
+                          data = data_trimmed_correct,
+                          weights = varIdent(form = ~ 1 | targetValidity)) # variable variance
+
+# get mean for the interaction model (not including sbj!)
+rt.emm <- emmeans(rt.interaction_sbj, ~ cueType * targetValidity,
+                  mode = "appx-satterthwaite")
+
+# create contrast across cue type and target validity
+rt.contrasts <- rbind(as.data.table(pairs(rt.emm,
+                     simple = list("cueType", "targetValidity"))$`simple contrasts for cueType`), # cue type
+                     as.data.table(pairs(rt.emm,
+                     simple = list("cueType", "targetValidity"))$`simple contrasts for targetValidity`), # target validity
+                     use.names = FALSE) # because one column is named differently
+
+```
+
+```{r valAnalysis}
+# create data table with validity results
+# tidy() need the package broom
+val.results <- data_validity[, .(shapiroW = tidy(shapiro.test(validityEffect))$statistic,
+                                 shapirop = tidy(shapiro.test(validityEffect))$p.value,
+                                 mean = tidy(t.test(validityEffect, mu = 0))$estimate,
+                                 sd = sd(validityEffect),
+                                 tstat = tidy(t.test(validityEffect, mu = 0))$statistic,
+                                 p.value = tidy(t.test(validityEffect, mu = 0))$p.value,
+                                 wilcoxonp = tidy(wilcox.test(validityEffect,
+                                                              mu = 0))$p.value,
+                                 df = tidy(t.test(validityEffect, mu = 0))$parameter,
+                                 lowerCI = tidy(t.test(validityEffect, mu = 0))$conf.low,
+                                 upperCI = tidy(t.test(validityEffect, mu = 0))$conf.high,
+                                 d_biased = (mean(validityEffect) / sd(validityEffect)), # effect size biased
+                                 n = length(validityEffect)),
+                             by = .(cueType)]
+
+# Andere Tests auf Normalverteilung
+
+# ad.test(data_validity[cueType == "match"]$validityEffect)
+# cvm.test(data_validity[cueType == "match"]$validityEffect)
+# sf.test(data_validity[cueType == "match"]$validityEffect)
+# lillie.test(data_validity[cueType == "match"]$validityEffect)
+# pearson.test(data_validity[cueType == "match"]$validityEffect)
+
+# add effect size
+# ci.sm() needs the package MBESS
+val.results[, `:=` (d_unbiased = d_biased * (1 - 3/(4 * (n - 1) - 1)), # hedges correction for effect size
+                    esLowerCI = ci.sm(sm = d_biased,
+                                      N = n)$Lower.Conf.Limit.Standardized.Mean,
+                    esUpperCI = ci.sm(sm = d_biased,
+                                      N = n)$Upper.Conf.Limit.Standardized.Mean),
+            by = .(cueType)]
+```
+
+
+### Reaction Times {-}
+
+We analyzed the reaction time of correct responses using a linear mixed-effect model with the fixed factors target validity and cue type and the per-participant intercept as a random factor. Hierarchical model comparisons showed that the model with the interaction between target validity and cue condition best explained the data. The mean reaction times are shown in Table\ \@ref(tab:tableMeans).
+
+Post-hoc test showed that the interaction is driven by significantly slower reaction time in trials with invalid compared to valid matching cues. We found the reversed pattern with non-matching cues, where reaction times were significantly slower in trials with valid compared to invalid cues. Correspondingly, reaction times were significantly faster in matching compared to valid non-matching valid and inhibition cues, see Table\ \@ref(tab:tableContrasts). The mean reaction times including individual means are plotted in Figure\ \@ref(fig:plotReactionTime).
+
+```{r RTtables, results="asis", echo=FALSE}
+# make contrast table-ready
+# infos about tables: http://haozhu233.github.io/kableExtra/awesome_table_in_html.html
+# reduce data frame for to table-relevant columns
+rt.emm_table <- as.data.table(rt.emm)
+# convert seconds in milliseconds
+rt.emm_table[, c("emmean", "SE", "lower.CL", "upper.CL")] <- rt.emm_table[, c("emmean", "SE", "lower.CL", "upper.CL")] * 1000
+
+kbl(rt.emm_table,
+    digits = c(0, 0, 0, 2, 2, 0, 0),
+    caption = "Mean Reaction Times",
+    label = "tableMeans",
+    col.names = c("Cue Condition", "Target Validity", "*M*", "*SE*", "df", "Lower CI", "Upper CI")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>%
+  footnote(general = "*M*, *SE*, and CIs in ms.",
+           footnote_as_chunk = TRUE)
+
+rt.contrasts_table <- as.data.table(rt.contrasts)
+# convert seconds in milliseconds
+rt.contrasts_table[, c("estimate", "SE")] <- rt.contrasts_table[, c("estimate", "SE")] * 1000
+rt.contrasts_table <- papafy(rt.contrasts_table, p_column = "p.value", decimal = 3)
+kbl(rt.contrasts_table,
+    digits = c(0, 0, 0, 2, 0, 2, 0),
+    caption = "Comparisons Between Mean Reaction Times",
+    label = "tableContrasts",
+    col.names = c("Comparisons", "cue type / Target Validity", "*M*", "*SE*", "df", "*t* statstic", "*p* value")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>%
+  footnote(general = "*M* and *SE* in ms.",
+           footnote_as_chunk = TRUE)
+```
+
+(ref:plotReactionTimecaption) Mean reaction times in each experimental condition (solid points with error bars) and data points per participant (semitransparent points). The error bars represent 95% comparison intervals for all mean comparisons (adjusted using the Tukey method for comparing a family of four estimates). The most extreme values have only one error bar since they can only be compared to a less extreme value. If the comparisons intervals do not overlap, the difference is significant.
+
+```{r plotReactionTime, fig.cap="(ref:plotReactionTimecaption)", echo=FALSE, message=FALSE, results='hide', fig.width=5, fig.height=5.5}
+# data preparations for plots
+# using the model with sbj as fixed factor for correct comparisons arrows
+rtMeans <- plot(emmeans(rt.interaction_sbj, ~ targetValidity * cueType), comparisons = TRUE) # to get comparison arrows
+
+rtMeans <- as.data.table(rtMeans[["data"]]) # extract the data from the plot
+
+# rt.interaction_sbj2 <- lmer(meanRT ~ cueType * targetValidity + (1 | sbj),
+#                             data = data_trimmed_correct_means_sbj) # variable variance
+# 
+# rtMeans <- plot(emmeans(rt.interaction_sbj2, pairwise ~ targetValidity),
+#                 comparisons = TRUE) # to get comparison arrows
+# 
+# rtMeans <- as.data.table(rtMeans[["data"]]) # extract the data from the plot
+
+# the mean reaction times are indeed correct, compare with this
+data_trimmed_correct_means_sbj[, .(meanRT = mean(meanRT)),
+                               by = .(cueType, targetValidity)]
+rtMeans[, c("the.emmean")]
+
+# plot
+ggplot(rtMeans, aes(x = targetValidity, y = the.emmean, color = cueType)) +
+  geom_violin(data = data_trimmed_correct_means_sbj,
+              aes(targetValidity, meanRT, fill = cueType),
+              color = NA, alpha = 0.3) +
+  geom_point(data = data_trimmed_correct_means_sbj,
+             aes(targetValidity, meanRT, color = cueType),
+             position = position_jitterdodge(jitter.width = 0.1, jitter.height = 0,
+                                             dodge.width = 0.9), alpha = 0.4, size = 2) +
+  geom_line(aes(y = the.emmean, group = cueType),
+            position = position_dodge(width = 0.9), size = 1) +
+  geom_linerange(aes(group = cueType, ymin = the.emmean, ymax = rcmpl),
+                position = position_dodge(width = 0.9), size = 1, show.legend = FALSE) +
+  geom_linerange(aes(group = cueType, ymin = lcmpl, ymax = the.emmean),
+                position = position_dodge(width = 0.9), size = 1, show.legend = FALSE) +
+  geom_point(position = position_dodge(width = 0.9), size = 2) +
+  geom_errorbar(width = .4, aes(ymin = lcmpl, ymax = rcmpl, group = cueType),
+                position = position_dodge(width = 0.9), size = 1) +
+  labs(title = "Mean Reaction Times",
+       x = "Target Validity",
+       y = "Reaction Time in ms",
+       fill = "Cue Type",
+       color = "Cue Type") +
+  scale_fill_viridis_d(end = 0.80) +
+  scale_color_viridis_d(end = 0.80) +
+  scale_y_continuous(labels = function(x) x * 1000) +
+  geom_label_repel(aes(group = cueType, label = round(the.emmean * 1000)),
+                   size = 3, colour = "black", position=position_dodge(width = 0.9),
+                   point.padding = 0.5) +
+  theme(legend.position = "bottom",
+        panel.background = element_blank(),
+        panel.grid = element_line(color = "gray"),
+        panel.grid.minor.x = element_blank())
+
+```
+
+### Validity Effects {-}
+
+A Shapiro-Wilk test for normality showed that the validity effect in each cue condition did not significantly deviate from the normal distribution (*W*\ =\ `r round(val.results[cueType == "match"]$shapiroW, 2)`, *p*\ =\ `r substring(trimws(format(round(val.results[cueType == "match"]$shapirop, 3), nsmall = 3)), 2)` for matching cues and 
+*W*\ =\ `r round(val.results[cueType == "non-match"]$shapiroW, 2)`, *p*\ =\ `r substring(trimws(format(round(val.results[cueType == "non-match"]$shapirop, 3), nsmall = 3)), 2)` for non-matching cues).
+
+Using a two-sided one sample *t* test against zero, we found a statistically significant validity effect for matching cues
+(*M*\ =\ `r round(val.results[cueType == "match"]$mean * 1000)`\ ms,
+95\% CI [`r round(val.results[cueType == "match"]$lowerCI * 1000)`, `r round(val.results[cueType == "match"]$upperCI * 1000)`],
+*SD*\ =\ `r round(val.results[cueType == "match"]$sd * 1000)`\ ms,
+*t*(`r val.results[cueType == "match"]$df`)\ =\ `r round(val.results[cueType == "match"]$tstat, 2)`,
+*p*\ =\ `r substring(trimws(format(round(val.results[cueType == "match"]$p.value, 3), nsmall = 3)), 2)`,
+*d~unbiased~*\ =\ `r round(val.results[cueType == "match"]$d_unbiased, 2)` 
+[`r round(val.results[cueType == "match"]$esLowerCI, 2)`,\ 
+      `r round(val.results[cueType == "match"]$esUpperCI, 2)`])
+and a significant negative validity effect for non-matching cues (*M*\ =\ `r round(val.results[cueType == "non-match"]$mean * 1000)`\ ms, [`r round(val.results[cueType == "non-match"]$lowerCI * 1000)`,
+         `r round(val.results[cueType == "non-match"]$upperCI * 1000)`],
+*SD*\ =\ `r round(val.results[cueType == "non-match"]$sd * 1000)`\ ms,
+*t*(`r val.results[cueType == "non-match"]$df`)\ =\ `r round(val.results[cueType == "non-match"]$tstat, 2)`,
+*p*\ =\ `r substring(trimws(format(round(val.results[cueType == "non-match"]$p.value, 3), nsmall = 3)), 2)`,
+*d~unbiased~*\ =\ `r round(val.results[cueType == "non-match"]$d_unbiased, 2)`, 
+[`r round(val.results[cueType == "non-match"]$esLowerCI, 2)`,\ 
+      `r round(val.results[cueType == "non-match"]$esUpperCI, 2)`]). Figure\ \@ref(fig:plotValidity) shows the validity effects.
+
+(ref:plotValiditycaption) Validity effect for matching and non-matching cues (in red) and for each participant (grey points). The individual validity effects are plotted to show their distribution. The lines connect values of one participants, and the red error bars represent the 95% CI for the one-sample *t* test against zero (red dotted line). In this case, no overlapping of the CI with zero indicates a significant difference. The black error bars represent 95% comparison intervals for the mean comparison. The values have only one error bar since there is only the comparison with the other value. If the comparison intervals do not overlap, the difference is significant. No validity effect was found for the inhibition cues.
+
+```{r plotValidity, fig.cap="(ref:plotValiditycaption)", echo=FALSE, message=FALSE, results='hide', fig.width=5, fig.height=5.5}
+val.cueType <- lmer(validityEffect ~ cueType + (1 | sbj), data_validity)
+meanVal <- plot(emmeans(val.cueType, pairwise ~ cueType), comparison = TRUE)
+meanVal <- as.data.table(meanVal[["data"]])
+
+# add correct confidence intervals from the one-sample t tests
+
+# make sure the order is the same
+val.results <- val.results[order(cueType)]
+meanVal <- meanVal[order(cueType)]
+meanVal$lowerCI <- val.results$lowerCI
+meanVal$upperCI <- val.results$upperCI
+
+# plot
+ggplot(meanVal, aes(cueType, the.emmean)) +
+   geom_violin(data = data_validity, aes(cueType, validityEffect), color = NA, fill = "black", alpha = 0.2) +
+   geom_jitter(data = data_validity, aes(cueType, validityEffect),
+               width = 0, height = 0, alpha = 0.5, size = 2) +
+   geom_path(data = data_validity, aes(cueType, validityEffect,
+                                       group = sbj),
+             linetype = 1, size = 1, alpha = 0.2) +
+   geom_hline(aes(yintercept = 0), color = "red", linetype = 2, size = 1) +
+   geom_errorbar(aes(ymin = lcmpl,
+                     ymax = rcmpl), width = 0.3,
+                 color = "black", size = 1) +
+   geom_linerange(aes(group = cueType, ymin = the.emmean, ymax = rcmpl),
+                  position = position_dodge(width = 0.9), size = 1, show.legend = FALSE) +
+   geom_linerange(aes(group = cueType, ymin = lcmpl, ymax = the.emmean),
+                  position = position_dodge(width = 0.9), size = 1, show.legend = FALSE) +
+   geom_line(aes(cueType, the.emmean, group = 1), color = "black", size = 1) +
+   geom_errorbar(aes(ymin = lower.CL,
+                     ymax = upper.CL), width = 0.15,
+                 color = "red", size = 1) +
+   geom_point(color = "red", size = 2) +
+   geom_label_repel(aes(label = round(the.emmean * 1000, 0)),
+                    size = 3, color = "black", nudge_x = 0.1) +
+   labs(title = "Mean Validity Effect",
+        color = "Cue Type",
+        y = "Validity Effect in ms",
+        x = "Cue Type") +
+   scale_y_continuous(labels = function(x) x * 1000) +
+   theme(panel.background = element_blank(),
+         panel.grid = element_line(color = "gray"),
+         panel.grid.minor.x = element_blank(),
+         panel.grid.major.x = element_blank())
+```
+
+
+### Model diagnostic {-}
+
+```{r diagnostik diagramme}
+
+resid_panel(rt.interaction, plots = "all")
+
+```
+
+The model assumptions are met for the following reasons:
+
+**Independence of observations**
+
+This requirement is given by design. Although the available within-subject factors are not independent per subject, this was taken into account by the random effect (```(1 | sbj)```.
+
+**Linear relationship between predictor variables and response variables**
+
+The comparison of the predicted and the actual reaction times shows a linear relationship.
+
+**Consistent variance of the residuals**
+
+The residual plot shows that the variance of the residuals is pretty much the same: the residuals are fairly evenly distributed around the horizontal axis, and no particular pattern can be discerned (although there are some upward deviations, but the model should be sufficiently robust)
+
+**Normal distribution of the residuals**
+
+
+### Backlog {-}
+
+
+
+```{r check no of trials, include=FALSE}
+
+valid_matching <- data_trimmed_correct[cueType == "match" & targetValidity == "valid", .N, by = sbj]
+invalid_matching <- data_trimmed_correct[cueType == "match" & targetValidity == "invalid", .N, by = sbj]
+
+print(paste("range of valid matching trials: ", min(valid_matching$N), "-", max(valid_matching$N)))
+print(paste("M = ", mean(valid_matching$N), "SD = ", round(sd(valid_matching$N), 2), "Mdn = ", median(valid_matching$N)))
+
+print(paste("range of invalid matching trials: ", min(invalid_matching$N), "-", max(invalid_matching$N)))
+print(paste("M = ", mean(invalid_matching$N), "SD = ", round(sd(invalid_matching$N), 2), "Mdn = ", median(invalid_matching$N)))
+
+
+```
+
