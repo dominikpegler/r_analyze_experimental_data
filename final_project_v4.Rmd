@@ -568,7 +568,7 @@ ggplot() +
 ### Validity effect {-}
 
 
-```{r validity effect, echo=FALSE}
+```{r validity effect, echo=FALSE, message=FALSE, warning=FALSE}
 
 # calc validity effect by subject
 validity_effect <- data_trimmed_correct[, .(validityEffect = mean(reactionTime[targetValidity == "invalid"]) - mean(reactionTime[targetValidity == "valid"]) ),
@@ -632,7 +632,7 @@ ggplot() +
 
 ### Number of correct trials {-}
 
-```{r count of correct trials, echo=FALSE}
+```{r count of correct trials, echo=FALSE, message=FALSE, warning=FALSE}
 
 ggplot(data = data_trimmed_correct, aes(x=sbj, fill=cueType)) +
   
@@ -694,7 +694,7 @@ rt.contrasts <- rbind(as.data.table(pairs(rt.emm,
 
 ```
 
-```{r valAnalysis}
+```{r valAnalysis, message=FALSE, warning=FALSE, include=FALSE}
 # create data table with validity results
 # tidy() need the package broom
 val.results <- data_validity[, .(shapiroW = tidy(shapiro.test(validityEffect))$statistic,
