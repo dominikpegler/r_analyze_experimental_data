@@ -17,10 +17,14 @@ editor_options:
   chunk_output_type: console
 ---
 
+# Experiment 2 {-}
+
+
 ## Content {-}
 
 - Research question
-- ...
+- Method
+- Results
 
 ## Research question {-}
 
@@ -255,7 +259,6 @@ data_validity[, .(meanVal = mean(validityEffect)), by = .(cueType)]
 
 ```
 
-# Experiment 2 {-}
 
 ## Method {-}
 
@@ -279,7 +282,6 @@ sbj <- data_unique[, .(meanAge = round(mean(age), 2),
 
 `r sbj$n` participants (`r sbj$woman` women, `r sbj$man` men) aged between `r sbj$minAge` and `r sbj$maxAge` years (*M*\ =\ `r sbj$meanAge`, *SD*\ =\ `r sbj$sdAge`, *Mdn*\ =\ `r sbj$medianAge`) took part in the experiment. No participant was excluded. Since this was only one condition of the experiment, we didn't want to remove any outliers for the time being. Outlier removal could then be considered and discussed in a second step across all conditions of the experiment.
 
-## Results {-}
 
 ### Reliability and Power {-}
 
@@ -419,6 +421,7 @@ powerResults[cueType == "match"]$testPower
 
 We excluded `r round(wrongAnswers_percentage, 2)`% incorrectly answered trials (including trials where participants did not respond) and from the remaining trials we excluded trials with reaction times below 150\ ms and above 1\ s from all analyses (`r round(excluded_percentage, 2)`%). After these exclusions, the number of valid matching trials ranged from `r trialsPerCell_results[cueType == "match" & targetValidity == "valid"]$minN` to `r trialsPerCell_results[cueType == "match" & targetValidity == "valid"]$maxN` (*M*\ =\ `r round(trialsPerCell_results[cueType == "match" & targetValidity == "valid"]$meanN, 2)`, *SD*\ =\ `r round(trialsPerCell_results[cueType == "match" & targetValidity == "valid"]$sdN, 2)`, *Mdn*\ =\ `r trialsPerCell_results[cueType == "match" & targetValidity == "valid"]$medianN`), and of valid non-matching trials from `r trialsPerCell_results[cueType == "non-match" & targetValidity == "valid"]$minN` to `r trialsPerCell_results[cueType == "non-match" & targetValidity == "valid"]$maxN` (*M*\ =\ `r round(trialsPerCell_results[cueType == "non-match" & targetValidity == "valid"]$meanN, 2)`, *SD*\ =\ `r round(trialsPerCell_results[cueType == "non-match" & targetValidity == "valid"]$sdN, 2)`, *Mdn*\ =\ `r trialsPerCell_results[cueType == "non-match" & targetValidity == "valid"]$medianN`) per participant. A power analysis based on `r Nsim` simulations yielded a power of `r substring(trimws(format(round(powerResults[cueType == "match"]$testPower, 3), nsmall = 3)), 2)` to find a validity effect of 20\ ms in the matching condition with the sample size of `r sample_size` participants.
 
+## Results {-}
 
 ## Plotting {.tabset -}
 
