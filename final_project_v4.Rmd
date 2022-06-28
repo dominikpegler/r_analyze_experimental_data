@@ -869,7 +869,7 @@ ggplot(meanVal, aes(cueType, the.emmean)) +
    geom_violin(data = data_validity, aes(cueType, validityEffect), color = NA, fill = "black", alpha = 0.2) +
    geom_jitter(data = data_validity, aes(cueType, validityEffect),
                width = 0, height = 0, alpha = 0.5, size = 2) +
-   geom_path(data = data_validity, aes(cueType, validityEffect,
+   geom_line(data = data_validity, aes(cueType, validityEffect,
                                        group = sbj),
              linetype = 1, size = 1, alpha = 0.2) +
    geom_hline(aes(yintercept = 0), color = "red", linetype = 2, size = 1) +
