@@ -239,12 +239,12 @@ grubbs.test(errorTable$errorRate, type = 10, two.sided = FALSE, opposite = TRUE)
 ```{r exclude reaction times, include=FALSE}
 
 # exclude incorrectly answered trials and timeouts
-data_correct <- data[ !(answerCorrect == "incorrect" | answerCorrect == "timeout") ]
-wrongAnswers_percentage <-  (nrow(data) - nrow(data_correct)) / nrow(data) 
+data_correct <- data[ (answerCorrect == "correct") ]
+wrongAnswers_percentage <- (1 - nrow(data_correct) / nrow(data)) * 100
 
 # exclude trials with rt below 0.15s or above 1s
 data_trimmed_correct <- data_correct[! (reactionTime < 0.150 | reactionTime > 1)  ] 
-excluded_percentage <- (nrow(data_correct) - nrow(data_trimmed_correct)) / nrow(data_correct) 
+excluded_percentage <- (1 - nrow(data_trimmed_correct) / nrow(data_correct)) * 100
 
 
 data_trimmed_correct_means_sbj <- data_trimmed_correct[, .(meanRT = mean(reactionTime)),
